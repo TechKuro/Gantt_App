@@ -810,10 +810,28 @@ class GanttChartApp(tk.Tk):
 
         parent_iid = self.task_tree.parent(iid)
         if not parent_iid:
-            self._tree_drag_data = {"type": "task", "iid": iid}
+            # Store initial position for drag detection
+            self._tree_drag_data = {
+                "type": "task", 
+                "iid": iid, 
+                "start_x": event.x, 
+                "start_y": event.y,
+                "has_moved": False
+            }
 
     def on_tree_motion(self, event):
         if not self._tree_drag_data: return
+
+        # Check if we've moved enough to consider this a drag operation
+        start_x = self._tree_drag_data["start_x"]
+        start_y = self._tree_drag_data["start_y"]
+        
+        # Require at least 5 pixels of movement to start dragging
+        if abs(event.x - start_x) < 5 and abs(event.y - start_y) < 5:
+            return
+        
+        # Mark that we've actually moved (started dragging)
+        self._tree_drag_data["has_moved"] = True
 
         drag_iid = self._tree_drag_data["iid"]
         target_iid = self.task_tree.identify_row(event.y)
@@ -827,20 +845,35 @@ class GanttChartApp(tk.Tk):
         if not self._tree_drag_data:
             return
 
-        new_task_order_iids = self.task_tree.get_children("")
-        new_task_names = [self.task_tree.item(iid, "text") for iid in new_task_order_iids]
-        
-        tasks_dict = {task['name']: task for task in self.tasks_data}
-        
-        new_tasks_data_list = []
-        for name in new_task_names:
-            if name in tasks_dict:
-                new_tasks_data_list.append(tasks_dict[name])
-        
-        self.tasks_data = new_tasks_data_list
+        # Only process reordering if we actually moved (dragged)
+        if self._tree_drag_data.get("has_moved", False):
+            # Check if the order actually changed before triggering a refresh
+            new_task_order_iids = self.task_tree.get_children("")
+            new_task_names = [self.task_tree.item(iid, "text") for iid in new_task_order_iids]
+            
+            # Get the current order of task names
+            current_task_names = [task['name'] for task in self.tasks_data]
+            
+            # Only update if the order actually changed
+            if new_task_names != current_task_names:
+                tasks_dict = {task['name']: task for task in self.tasks_data}
+                
+                new_tasks_data_list = []
+                for name in new_task_names:
+                    if name in tasks_dict:
+                        new_tasks_data_list.append(tasks_dict[name])
+                
+                self.tasks_data = new_tasks_data_list
+                self.on_ui_change()
+        else:
+            # This was just a click, not a drag - allow normal selection
+            iid = self._tree_drag_data.get("iid")
+            if iid:
+                # Ensure the item is selected (normal treeview behavior)
+                self.task_tree.selection_set(iid)
+                self.task_tree.focus(iid)
         
         self._tree_drag_data = {}
-        self.on_ui_change()
 
     def edit_task(self, item_id=None):
         selected_id = None
