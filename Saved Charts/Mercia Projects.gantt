@@ -1,0 +1,384 @@
+{
+    "project_name": "Mercia Project Timeline",
+    "project_start_date": "27-06-2025",
+    "tasks": [
+        {
+            "name": "Kim Documents",
+            "depends_on": null,
+            "start_date_override": "01-03-2024",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 84.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 177.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 19.5,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-03-2025"
+        },
+        {
+            "name": "SharePoint Implementation",
+            "depends_on": null,
+            "start_date_override": "23-04-2024",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 47.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 81.5,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 95.5,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "28-02-2025"
+        },
+        {
+            "name": "Strategic Foundations",
+            "depends_on": null,
+            "start_date_override": "01-05-2024",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 70.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 234.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 22.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-07-2025"
+        },
+        {
+            "name": "Fund Admin Process Mapping",
+            "depends_on": null,
+            "start_date_override": "01-04-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 14.66,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 23.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 6.5,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-05-2025"
+        },
+        {
+            "name": "Slack -> Teams Migration",
+            "depends_on": null,
+            "start_date_override": "01-04-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 64.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 50.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 17.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "30-09-2025"
+        },
+        {
+            "name": "Migrate to Nexian Managed Services",
+            "depends_on": null,
+            "start_date_override": "02-04-2024",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 259.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 134.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 20.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-10-2025"
+        },
+        {
+            "name": "Microsoft 365 Copilot Deployment",
+            "depends_on": null,
+            "start_date_override": "01-05-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 22.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 22.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 22.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-07-2025"
+        },
+        {
+            "name": "Copilot & SharePoint Integration",
+            "depends_on": null,
+            "start_date_override": "01-07-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 22.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 22.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 22.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "30-09-2025"
+        },
+        {
+            "name": "Windows Application Deployment",
+            "depends_on": null,
+            "start_date_override": "01-07-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 29.66,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 53.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 5.5,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-10-2025"
+        },
+        {
+            "name": "Business Intelligence Data Pipeline",
+            "depends_on": null,
+            "start_date_override": "01-08-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 28.66,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 52.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 5.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "30-11-2025"
+        },
+        {
+            "name": "Getting the Most Out of AI Tools",
+            "depends_on": null,
+            "start_date_override": "01-08-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 36.34,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 36.33,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 36.33,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-12-2025"
+        },
+        {
+            "name": "Power Bi Dashboards",
+            "depends_on": null,
+            "start_date_override": "01-10-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 29.34,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 46.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 11.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-01-2026"
+        },
+        {
+            "name": "QuickBase & SharePoint Automation",
+            "depends_on": null,
+            "start_date_override": "01-11-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 35.66,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 21.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 50.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-03-2026"
+        },
+        {
+            "name": "Purview Sensitivity Labels",
+            "depends_on": null,
+            "start_date_override": "01-11-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 64.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 65.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 65.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "31-07-2026"
+        }
+    ],
+    "stages": [
+        [
+            "Preparation",
+            "#f0ad4e"
+        ],
+        [
+            "Implementation",
+            "#5bc0de"
+        ],
+        [
+            "Training/Adoption",
+            "#5cb85c"
+        ]
+    ]
+}

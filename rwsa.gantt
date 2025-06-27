@@ -1,0 +1,72 @@
+{
+    "project_name": "New Project",
+    "project_start_date": "26-06-2025",
+    "tasks": [
+        {
+            "name": "New Task 1",
+            "depends_on": null,
+            "start_date_override": "05-05-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 7.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 15.25,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 21.75,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": "01-07-2025"
+        },
+        {
+            "name": "New Task 2",
+            "depends_on": "New Task 1",
+            "start_date_override": "13-05-2025",
+            "sub_tasks": [
+                {
+                    "name": "Preparation",
+                    "duration": 17.5,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Implementation",
+                    "duration": 1.0,
+                    "status": "Not Started",
+                    "start_date_override": null
+                },
+                {
+                    "name": "Training/Adoption",
+                    "duration": 27.5,
+                    "status": "Not Started",
+                    "start_date_override": null
+                }
+            ],
+            "end_date_override": null
+        }
+    ],
+    "stages": [
+        [
+            "Preparation",
+            "#f0ad4e"
+        ],
+        [
+            "Implementation",
+            "#5bc0de"
+        ],
+        [
+            "Training/Adoption",
+            "#5cb85c"
+        ]
+    ]
+}
