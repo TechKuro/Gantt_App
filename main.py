@@ -1036,8 +1036,27 @@ class GanttChartApp(tk.Tk):
         def duration_to_width(start_date, end_date):
             start_idx = date_to_index.get(start_date.date())
             end_idx = date_to_index.get(end_date.date())
-            if start_idx is None or end_idx is None: return 0
-            return end_idx - start_idx + 1
+            
+            # If start date is not a work day, return 0 (task shouldn't be displayed)
+            if start_idx is None: 
+                return 0
+            
+            # If end date is not a work day (e.g., weekend), find the previous work day
+            if end_idx is None:
+                # Move end_date backwards to find the last work day before or on the end date
+                temp_end = end_date
+                while temp_end >= start_date and end_idx is None:
+                    end_idx = date_to_index.get(temp_end.date())
+                    if end_idx is None:
+                        temp_end -= timedelta(days=1)
+                
+                # If we still can't find a work day, the task duration might be invalid
+                if end_idx is None:
+                    return 0
+            
+            # Ensure we have a positive width
+            width = max(1, end_idx - start_idx + 1)
+            return width
 
         def subtask_duration_to_width(d):
             return d
@@ -1129,6 +1148,8 @@ class GanttChartApp(tk.Tk):
                 if start_coord is None: continue
 
                 width = duration_to_width(task['start'], task['end'])
+                if width <= 0: continue
+                
                 agg_status = self._get_aggregate_status(task)
                 color = self.status_colors.get(agg_status, "gray")
                 
