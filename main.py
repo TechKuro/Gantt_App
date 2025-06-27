@@ -40,8 +40,6 @@ class GanttChartApp(tk.Tk):
         self.show_dependencies_var = tk.BooleanVar(value=True)
         self.chart_items = []
         self._tree_drag_data = {}
-        self._link_mode_enabled = False
-        self._link_start_item = None
         self.style = ttk.Style()
         self.style.configure('Accent.TButton', relief=tk.SUNKEN)
         self._highlighted_patches = {} # For hover effects
@@ -88,34 +86,6 @@ class GanttChartApp(tk.Tk):
             return
 
         if event.inaxes != self.ax: return
-
-        if self._link_mode_enabled:
-            clicked_item = None
-            for item in reversed(self.chart_items):
-                if item['level'] != 0: continue # Can only link parent tasks
-                patch = item.get('patch')
-                if patch and patch.contains(event)[0]:
-                    clicked_item = item
-                    break
-            
-            if clicked_item:
-                if not self._link_start_item:
-                    # This is the first click, defining the predecessor
-                    self._link_start_item = clicked_item
-                    # Maybe add a visual cue here, like changing the bar color
-                else:
-                    # This is the second click, defining the successor and creating the link
-                    start_task = self._link_start_item['data']
-                    end_task = clicked_item['data']
-
-                    if start_task is not end_task:
-                        end_task['depends_on'] = start_task['name']
-                        end_task['start_date_override'] = None # Dependency takes precedence
-                        self.calculate_and_draw()
-
-                    # Reset and exit link mode
-                    self.toggle_link_mode()
-            return
 
         if event.dblclick:
             clicked_item = None
@@ -740,8 +710,6 @@ class GanttChartApp(tk.Tk):
         ttk.Button(action_frame, text="Add New Task", command=self.add_task).pack(side=tk.LEFT, padx=5)
         ttk.Button(action_frame, text="Edit Selected Task", command=self.edit_task).pack(side=tk.LEFT, padx=5)
         ttk.Button(action_frame, text="Remove Selected Task", command=self.remove_task).pack(side=tk.LEFT, padx=5)
-        self.link_button = ttk.Button(action_frame, text="Link Tasks", command=self.toggle_link_mode)
-        self.link_button.pack(side=tk.LEFT, padx=5)
 
     def populate_treeview(self):
         for i in self.task_tree.get_children():
@@ -1365,16 +1333,7 @@ class GanttChartApp(tk.Tk):
                     predecessor_item['data']['connections'].append(con)
                     item['data']['connections'].append(con)
 
-    def toggle_link_mode(self):
-        self._link_mode_enabled = not self._link_mode_enabled
-        if self._link_mode_enabled:
-            self.link_button.config(style="Accent.TButton")
-            self.canvas.get_tk_widget().config(cursor="crosshair")
-            self._link_start_item = None
-        else:
-            self.link_button.config(style="TButton")
-            self.canvas.get_tk_widget().config(cursor="")
-            self._link_start_item = None
+
 
     def _on_legend_drag_release(self, event):
         """Saves the legend's position only when a drag operation on it is completed."""
