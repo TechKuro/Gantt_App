@@ -90,6 +90,39 @@ class GanttChartApp(tk.Tk):
         self.new_blank_project() # Start with a blank project
         self.connect_drag_events()
         self.canvas.mpl_connect('button_release_event', self._on_legend_drag_release)
+        
+        # Context menu for right-click actions
+        self._create_context_menu()
+        self._linking_mode = None  # For dependency linking mode
+
+    def _create_context_menu(self):
+        """Create the right-click context menu for tasks."""
+        self.context_menu = tk.Menu(self, tearoff=0)
+        
+        # Status submenu
+        self.status_menu = tk.Menu(self.context_menu, tearoff=0)
+        self.status_menu.add_command(label="Not Started", 
+            command=lambda: self._set_task_status_from_menu("Not Started"))
+        self.status_menu.add_command(label="In Progress", 
+            command=lambda: self._set_task_status_from_menu("In Progress"))
+        self.status_menu.add_command(label="Completed", 
+            command=lambda: self._set_task_status_from_menu("Completed"))
+        
+        self.context_menu.add_cascade(label="Set Status", menu=self.status_menu)
+        self.context_menu.add_separator()
+        
+        # Dependency options
+        self.context_menu.add_command(label="Link to... (set dependency)", 
+            command=self._start_dependency_linking)
+        self.context_menu.add_command(label="Clear Dependency", 
+            command=self._clear_dependency_from_menu)
+        self.context_menu.add_separator()
+        
+        # Quick actions
+        self.context_menu.add_command(label="Edit Task...", 
+            command=self._edit_task_from_menu)
+        
+        self._context_menu_task = None  # Store which task was right-clicked
 
     def connect_drag_events(self):
         self.canvas.mpl_connect('button_press_event', self.on_press)
@@ -97,6 +130,16 @@ class GanttChartApp(tk.Tk):
         self.canvas.mpl_connect('button_release_event', self.on_release)
 
     def on_press(self, event):
+        # Handle right-click for context menu
+        if event.button == 3:  # Right mouse button
+            self._show_context_menu(event)
+            return
+        
+        # Handle dependency linking mode (click to select target)
+        if self._linking_mode and event.button == 1:
+            self._complete_dependency_linking(event)
+            return
+        
         # Let matplotlib's event handling take over if the click is on the legend.
         # We check this first to ensure our custom task-dragging logic doesn't interfere.
         # The `draggable=True` flag on the legend object handles the dragging automatically.
@@ -494,6 +537,174 @@ class GanttChartApp(tk.Tk):
                 dependents.update(transitive)
         
         return dependents
+
+    # --- Context Menu Methods ---
+    
+    def _show_context_menu(self, event):
+        """Show context menu when right-clicking on a task bar."""
+        if event.inaxes != self.ax:
+            return
+        
+        # Find which task was clicked
+        clicked_task = None
+        for item in reversed(self.chart_items):
+            patch = item.get('patch')
+            if patch and patch.contains(event)[0]:
+                # Get the parent task
+                if item['level'] == 0:
+                    clicked_task = item['data']
+                else:
+                    clicked_task = item.get('parent_task', item['data'])
+                break
+        
+        if clicked_task:
+            self._context_menu_task = clicked_task
+            
+            # Update menu to show current status with checkmark
+            current_status = self._get_aggregate_status(clicked_task)
+            for i, status in enumerate(["Not Started", "In Progress", "Completed"]):
+                label = f"✓ {status}" if status == current_status else f"   {status}"
+                self.status_menu.entryconfig(i, label=label)
+            
+            # Update dependency display
+            dep = clicked_task.get('depends_on')
+            if dep:
+                self.context_menu.entryconfig(3, label=f"Clear Dependency ({dep})")  # Clear Dependency option
+            else:
+                self.context_menu.entryconfig(3, label="Clear Dependency (none)")
+            
+            # Convert matplotlib coordinates to screen coordinates
+            canvas_widget = self.canvas.get_tk_widget()
+            x_screen = canvas_widget.winfo_rootx() + int(event.x)
+            y_screen = canvas_widget.winfo_rooty() + canvas_widget.winfo_height() - int(event.y)
+            
+            # Show the menu
+            try:
+                self.context_menu.tk_popup(x_screen, y_screen)
+            finally:
+                self.context_menu.grab_release()
+
+    def _set_task_status_from_menu(self, new_status):
+        """Set all stages of the right-clicked task to a new status."""
+        if not self._context_menu_task:
+            return
+        
+        task = self._context_menu_task
+        sub_tasks = task.get('sub_tasks', [])
+        
+        if sub_tasks:
+            for sub_task in sub_tasks:
+                sub_task['status'] = new_status
+            
+            self._mark_unsaved()
+            self.populate_treeview()
+            self.calculate_and_draw()
+            self._update_status_bar(f"Set '{task['name']}' to {new_status}")
+
+    def _start_dependency_linking(self):
+        """Start dependency linking mode - next click will set the dependency."""
+        if not self._context_menu_task:
+            return
+        
+        self._linking_mode = {
+            'source_task': self._context_menu_task,
+            'source_name': self._context_menu_task['name']
+        }
+        
+        # Visual feedback
+        self._update_status_bar(
+            f"🔗 Click on the task that '{self._context_menu_task['name']}' should depend on (Esc to cancel)"
+        )
+        self.canvas.get_tk_widget().config(cursor="cross")
+        
+        # Bind Escape to cancel
+        self.bind('<Escape>', self._cancel_dependency_linking)
+
+    def _complete_dependency_linking(self, event):
+        """Complete the dependency linking when user clicks on target task."""
+        if not self._linking_mode or event.inaxes != self.ax:
+            self._cancel_dependency_linking()
+            return
+        
+        # Find which task was clicked
+        target_task = None
+        for item in reversed(self.chart_items):
+            patch = item.get('patch')
+            if patch and patch.contains(event)[0]:
+                if item['level'] == 0:
+                    target_task = item['data']
+                else:
+                    target_task = item.get('parent_task', item['data'])
+                break
+        
+        source_task = self._linking_mode['source_task']
+        source_name = self._linking_mode['source_name']
+        
+        if target_task:
+            target_name = target_task['name']
+            
+            # Can't depend on yourself
+            if target_name == source_name:
+                messagebox.showwarning("Invalid Dependency", "A task cannot depend on itself.")
+                self._cancel_dependency_linking()
+                return
+            
+            # Check for cycles
+            if would_create_cycle(self.tasks_data, source_name, target_name):
+                messagebox.showerror(
+                    "Dependency Cycle",
+                    f"Cannot set '{target_name}' as dependency.\n\n"
+                    f"This would create a circular dependency."
+                )
+                self._cancel_dependency_linking()
+                return
+            
+            # Set the dependency
+            source_task['depends_on'] = target_name
+            source_task['start_date_override'] = None  # Clear pinned date
+            
+            self._mark_unsaved()
+            self.populate_treeview()
+            self.calculate_and_draw()
+            self._update_status_bar(f"Set '{source_name}' to depend on '{target_name}'")
+        
+        self._cancel_dependency_linking()
+
+    def _cancel_dependency_linking(self, event=None):
+        """Cancel dependency linking mode."""
+        self._linking_mode = None
+        self.canvas.get_tk_widget().config(cursor="")
+        self.unbind('<Escape>')
+        if not event:  # Only update status if not cancelled by Escape
+            pass
+        else:
+            self._update_status_bar("Dependency linking cancelled")
+
+    def _clear_dependency_from_menu(self):
+        """Clear the dependency of the right-clicked task."""
+        if not self._context_menu_task:
+            return
+        
+        task = self._context_menu_task
+        if task.get('depends_on'):
+            old_dep = task['depends_on']
+            task['depends_on'] = None
+            
+            self._mark_unsaved()
+            self.populate_treeview()
+            self.calculate_and_draw()
+            self._update_status_bar(f"Cleared dependency: '{task['name']}' no longer depends on '{old_dep}'")
+
+    def _edit_task_from_menu(self):
+        """Open the edit dialog for the right-clicked task."""
+        if not self._context_menu_task:
+            return
+        
+        task_name = self._context_menu_task['name']
+        for i, task in enumerate(self.tasks_data):
+            if task['name'] == task_name:
+                self.edit_task(item_id=f"task_{i}")
+                break
 
     def reset_legend_position(self):
         """Reset the legend to its default position (lower right)."""
