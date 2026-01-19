@@ -39,6 +39,8 @@ class GanttChartApp(tk.Tk):
         self.show_stages_var = tk.BooleanVar(value=True)
         self.show_dependencies_var = tk.BooleanVar(value=True)
         self.auto_schedule_var = tk.BooleanVar(value=False)  # Cascade changes to dependents
+        self.filter_status_var = tk.StringVar(value="All")  # Filter by status
+        self.sort_by_var = tk.StringVar(value="Order Added")  # Sort tasks
         self.chart_items = []
         self._tree_drag_data = {}
         self.style = ttk.Style()
@@ -942,6 +944,24 @@ class GanttChartApp(tk.Tk):
         editor_frame = ttk.LabelFrame(self.control_frame, text="Tasks", padding="10")
         editor_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
+        # Filter and Sort controls
+        filter_sort_frame = ttk.Frame(editor_frame)
+        filter_sort_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Label(filter_sort_frame, text="Filter:").pack(side=tk.LEFT)
+        filter_options = ["All", "Not Started", "In Progress", "Completed"]
+        filter_combo = ttk.Combobox(filter_sort_frame, textvariable=self.filter_status_var,
+                                    values=filter_options, state="readonly", width=12)
+        filter_combo.pack(side=tk.LEFT, padx=(2, 10))
+        filter_combo.bind("<<ComboboxSelected>>", self._on_filter_sort_change)
+        
+        ttk.Label(filter_sort_frame, text="Sort:").pack(side=tk.LEFT)
+        sort_options = ["Order Added", "Start Date", "Name (A-Z)", "Duration"]
+        sort_combo = ttk.Combobox(filter_sort_frame, textvariable=self.sort_by_var,
+                                  values=sort_options, state="readonly", width=12)
+        sort_combo.pack(side=tk.LEFT, padx=2)
+        sort_combo.bind("<<ComboboxSelected>>", self._on_filter_sort_change)
+        
         # Quick-add entry at top
         quick_add_frame = ttk.Frame(editor_frame)
         quick_add_frame.pack(fill=tk.X, pady=(0, 5))
@@ -1008,11 +1028,64 @@ class GanttChartApp(tk.Tk):
                               font=("Arial", 8), foreground="gray")
         hint_label.pack(pady=(0, 5))
 
+    def _on_filter_sort_change(self, event=None):
+        """Handle filter/sort dropdown changes."""
+        self.populate_treeview()
+        self.calculate_and_draw()
+
+    def _get_filtered_sorted_tasks(self):
+        """
+        Get tasks filtered and sorted according to current settings.
+        
+        Returns:
+            List of (original_index, task_data) tuples for filtered/sorted tasks.
+        """
+        # Start with indexed list to preserve original indices
+        indexed_tasks = list(enumerate(self.tasks_data))
+        
+        # Apply filter
+        filter_status = self.filter_status_var.get()
+        if filter_status != "All":
+            filtered = []
+            for idx, task in indexed_tasks:
+                agg_status = self._get_aggregate_status(task)
+                if agg_status == filter_status:
+                    filtered.append((idx, task))
+            indexed_tasks = filtered
+        
+        # Apply sort
+        sort_by = self.sort_by_var.get()
+        if sort_by == "Start Date":
+            # Sort by calculated start date (need to calculate first)
+            def get_start(item):
+                task = item[1]
+                if task.get('start'):
+                    return task['start']
+                if task.get('start_date_override'):
+                    try:
+                        return datetime.strptime(task['start_date_override'], "%d-%m-%Y")
+                    except ValueError:
+                        pass
+                return datetime.max  # Put tasks without dates at end
+            indexed_tasks.sort(key=get_start)
+        elif sort_by == "Name (A-Z)":
+            indexed_tasks.sort(key=lambda x: x[1]['name'].lower())
+        elif sort_by == "Duration":
+            def get_duration(item):
+                return sum(st.get('duration', 0) for st in item[1].get('sub_tasks', []))
+            indexed_tasks.sort(key=get_duration, reverse=True)
+        # "Order Added" is default (no sort needed)
+        
+        return indexed_tasks
+
     def populate_treeview(self):
         for i in self.task_tree.get_children():
             self.task_tree.delete(i)
         
-        for i, task_data in enumerate(self.tasks_data):
+        # Get filtered and sorted tasks
+        filtered_sorted = self._get_filtered_sorted_tasks()
+        
+        for original_idx, task_data in filtered_sorted:
             # Calculate total duration for parent task
             total_duration = sum(st.get('duration', 0) for st in task_data.get('sub_tasks', []))
             total_duration_str = f"{total_duration:.1f}" if total_duration else ""
@@ -1021,7 +1094,7 @@ class GanttChartApp(tk.Tk):
             agg_status = self._get_aggregate_status(task_data)
             
             task_id = self.task_tree.insert(
-                "", "end", iid=f"task_{i}", text=task_data['name'], open=True,
+                "", "end", iid=f"task_{original_idx}", text=task_data['name'], open=True,
                 values=(
                     total_duration_str, 
                     agg_status, 
@@ -1032,9 +1105,15 @@ class GanttChartApp(tk.Tk):
             
             for j, sub_task in enumerate(task_data.get('sub_tasks', [])):
                 self.task_tree.insert(
-                    task_id, "end", iid=f"task_{i}_sub_{j}", text=f"  - {sub_task['name']}",
+                    task_id, "end", iid=f"task_{original_idx}_sub_{j}", text=f"  - {sub_task['name']}",
                     values=(sub_task['duration'], sub_task['status'], "", "")
                 )
+        
+        # Update status bar with filter info
+        total_tasks = len(self.tasks_data)
+        shown_tasks = len(filtered_sorted)
+        if shown_tasks < total_tasks:
+            self._update_status_bar(f"Showing {shown_tasks} of {total_tasks} tasks (filtered)")
 
     def _on_quick_add_focus_in(self, event):
         """Clear placeholder when entry gains focus."""
