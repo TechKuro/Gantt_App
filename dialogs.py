@@ -348,4 +348,100 @@ class ManageStagesDialog(simpledialog.Dialog):
                 "color": new_color,
                 "original_name": original_name
             }
-        self.result = final_stages 
+        self.result = final_stages
+
+
+class ColumnMappingDialog(simpledialog.Dialog):
+    """
+    Dialog for mapping CSV/Excel columns to Gantt task fields during import.
+    """
+    def __init__(self, parent, title, columns):
+        self.columns = columns
+        self.mapping = {}
+        super().__init__(parent, title)
+
+    def body(self, master):
+        instruction_frame = ttk.Frame(master, padding=10)
+        instruction_frame.pack(fill=tk.X)
+        
+        ttk.Label(
+            instruction_frame, 
+            text="Map the columns from your file to the corresponding Gantt fields.\n"
+                 "Leave fields as 'Not Mapped' if not applicable.",
+            justify=tk.LEFT
+        ).pack(anchor="w")
+
+        mapping_frame = ttk.LabelFrame(master, text="Column Mapping", padding=10)
+        mapping_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        # Define the fields we want to map
+        self.field_definitions = [
+            ("Task Name", True),      # (field_name, required)
+            ("Start Date", False),
+            ("End Date", False),
+            ("Stage", False),
+            ("Status", False),
+            ("Dependencies", False),
+        ]
+
+        self.mapping_vars = {}
+        column_options = ["Not Mapped"] + self.columns
+
+        for i, (field_name, required) in enumerate(self.field_definitions):
+            label_text = f"{field_name}:"
+            if required:
+                label_text = f"{field_name}*:"
+            
+            ttk.Label(mapping_frame, text=label_text).grid(
+                row=i, column=0, sticky="w", padx=5, pady=3
+            )
+            
+            var = tk.StringVar(value="Not Mapped")
+            
+            # Try to auto-detect matching columns
+            for col in self.columns:
+                col_lower = col.lower().replace("_", " ").replace("-", " ")
+                field_lower = field_name.lower()
+                if field_lower in col_lower or col_lower in field_lower:
+                    var.set(col)
+                    break
+            
+            combo = ttk.Combobox(
+                mapping_frame, 
+                textvariable=var, 
+                values=column_options, 
+                state="readonly", 
+                width=30
+            )
+            combo.grid(row=i, column=1, sticky="w", padx=5, pady=3)
+            
+            self.mapping_vars[field_name] = var
+
+        # Required field note
+        ttk.Label(
+            master, 
+            text="* Required field",
+            font=("Arial", 8, "italic")
+        ).pack(anchor="w", padx=10, pady=(0, 10))
+
+        return mapping_frame
+
+    def validate(self):
+        """Validate that required fields are mapped."""
+        task_name_mapping = self.mapping_vars.get("Task Name")
+        if not task_name_mapping or task_name_mapping.get() == "Not Mapped":
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Mapping Required", 
+                "You must map a column to 'Task Name'.",
+                parent=self
+            )
+            return False
+        return True
+
+    def apply(self):
+        """Build the mapping dictionary from the selected values."""
+        for field_name, var in self.mapping_vars.items():
+            value = var.get()
+            if value and value != "Not Mapped":
+                self.mapping[field_name] = value
