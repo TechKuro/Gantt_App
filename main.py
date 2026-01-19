@@ -45,7 +45,9 @@ class GanttChartApp(tk.Tk):
         self._highlighted_patches = {} # For hover effects
         self.current_filepath = None
         self.view_mode = 'daily'
-        self.task_rows = {} 
+        self.task_rows = {}
+        self._has_unsaved_changes = False
+        self._last_save_time = None 
 
         # --- Menu Bar ---
         self.create_menu()
@@ -65,6 +67,16 @@ class GanttChartApp(tk.Tk):
         
         self.chart_frame = ttk.Frame(self.main_frame)
         self.chart_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        # --- Status Bar ---
+        self.status_bar = ttk.Frame(self, relief=tk.SUNKEN)
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        self.status_label = ttk.Label(self.status_bar, text="Ready", anchor=tk.W, padding=(5, 2))
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        self.save_status_label = ttk.Label(self.status_bar, text="", anchor=tk.E, padding=(5, 2))
+        self.save_status_label.pack(side=tk.RIGHT)
         
         # --- Initialization ---
         self.setup_chart_canvas()
@@ -477,11 +489,39 @@ class GanttChartApp(tk.Tk):
         if self._is_updating: return
         self._is_updating = True
         try:
+            self._mark_unsaved()
             self.update_window_title()
             self.populate_treeview() # Re-populating is now the main update path
             self.calculate_and_draw()
         finally:
             self._is_updating = False
+
+    def _mark_unsaved(self):
+        """Mark the project as having unsaved changes and update status bar."""
+        self._has_unsaved_changes = True
+        self._update_status_bar()
+
+    def _mark_saved(self):
+        """Mark the project as saved and update status bar."""
+        self._has_unsaved_changes = False
+        self._last_save_time = datetime.now()
+        self._update_status_bar()
+
+    def _update_status_bar(self, message=None):
+        """Update the status bar with current state."""
+        if message:
+            self.status_label.config(text=message)
+        else:
+            task_count = len(self.tasks_data)
+            self.status_label.config(text=f"{task_count} task{'s' if task_count != 1 else ''}")
+        
+        if self._has_unsaved_changes:
+            self.save_status_label.config(text="● Unsaved changes", foreground="orange")
+        elif self._last_save_time:
+            time_str = self._last_save_time.strftime("%H:%M")
+            self.save_status_label.config(text=f"Saved at {time_str}", foreground="green")
+        else:
+            self.save_status_label.config(text="", foreground="black")
 
     def update_window_title(self):
         project_name = self.project_name_var.get()
@@ -495,9 +535,12 @@ class GanttChartApp(tk.Tk):
         self.project_name_var.set("New Project")
         self.current_filepath = None
         self.saved_legend_position = None  # Reset legend position for new project
+        self._has_unsaved_changes = False
+        self._last_save_time = None
         self.populate_treeview()
         self.calculate_and_draw()
         self.update_window_title()
+        self._update_status_bar("New project created")
 
     def load_template(self):
         filepath = filedialog.askopenfilename(
@@ -553,10 +596,13 @@ class GanttChartApp(tk.Tk):
         
         # Restore legend position if saved
         self.saved_legend_position = project_data.get("legend_position")
+        self._has_unsaved_changes = False
+        self._last_save_time = None  # File was saved before we opened it
         
         self.populate_treeview()
         self.calculate_and_draw()
         self.update_window_title()
+        self._update_status_bar(f"Opened: {filepath}")
 
     def save_project_as(self):
         filepath = filedialog.asksaveasfilename(
@@ -587,6 +633,7 @@ class GanttChartApp(tk.Tk):
             json.dump(project_data, f, indent=4)
         
         self.current_filepath = filepath
+        self._mark_saved()
         self.update_window_title()
 
     def save_project_as_template(self):
