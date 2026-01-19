@@ -50,6 +50,7 @@ class GanttChartApp(tk.Tk):
         self._last_save_time = None
         self._debounce_job = None  # For debouncing UI updates
         self._current_inline_editor = None  # For inline cell editing
+        self._tooltip_annotation = None  # For chart tooltips
 
         # --- Menu Bar ---
         self.create_menu()
@@ -351,6 +352,7 @@ class GanttChartApp(tk.Tk):
                     patch.update(style)
                 self._highlighted_patches.clear()
                 self.canvas.draw_idle()
+            self._hide_tooltip()
             self.canvas.get_tk_widget().config(cursor="")
             return
         
@@ -386,6 +388,11 @@ class GanttChartApp(tk.Tk):
                     self._highlighted_patches[con_patch] = {'color': con_patch.get_edgecolor(), 'lw': con_patch.get_linewidth()}
                     con_patch.set_color('#31708f')
                     con_patch.set_linewidth(2.0)
+                
+                # Show tooltip
+                self._show_tooltip(event, parent_task_item['data'], hovered_item)
+        else:
+            self._hide_tooltip()
 
         self.canvas.draw_idle()
 
@@ -459,7 +466,8 @@ class GanttChartApp(tk.Tk):
         menubar.add_cascade(label="File", menu=file_menu)
         
         file_menu.add_command(label="New Blank Project", command=self.new_blank_project)
-        file_menu.add_command(label="Load Template", command=self.load_template)
+        file_menu.add_command(label="Load Sample Project", command=self.load_sample_project)
+        file_menu.add_command(label="Load Template...", command=self.load_template)
         file_menu.add_separator()
         file_menu.add_command(label="Open Project...", command=self.open_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
@@ -611,6 +619,74 @@ class GanttChartApp(tk.Tk):
         self.calculate_and_draw()
         self.update_window_title()
         self._update_status_bar("New project created")
+
+    def load_sample_project(self):
+        """Load a sample project to demonstrate features."""
+        # Create sample tasks that demonstrate various features
+        self.tasks_data = [
+            {
+                "name": "Project Planning",
+                "depends_on": None,
+                "start_date_override": None,
+                "sub_tasks": [
+                    {"name": "Preparation", "duration": 2, "status": "Completed"},
+                    {"name": "Implementation", "duration": 1, "status": "Completed"},
+                    {"name": "Training/Adoption", "duration": 0.5, "status": "Completed"}
+                ]
+            },
+            {
+                "name": "Requirements Gathering",
+                "depends_on": "Project Planning",
+                "start_date_override": None,
+                "sub_tasks": [
+                    {"name": "Preparation", "duration": 1, "status": "Completed"},
+                    {"name": "Implementation", "duration": 3, "status": "In Progress"},
+                    {"name": "Training/Adoption", "duration": 1, "status": "Not Started"}
+                ]
+            },
+            {
+                "name": "Design Phase",
+                "depends_on": "Requirements Gathering",
+                "start_date_override": None,
+                "sub_tasks": [
+                    {"name": "Preparation", "duration": 0.5, "status": "Not Started"},
+                    {"name": "Implementation", "duration": 4, "status": "Not Started"},
+                    {"name": "Training/Adoption", "duration": 0.5, "status": "Not Started"}
+                ]
+            },
+            {
+                "name": "Development Sprint 1",
+                "depends_on": "Design Phase",
+                "start_date_override": None,
+                "sub_tasks": [
+                    {"name": "Preparation", "duration": 0.5, "status": "Not Started"},
+                    {"name": "Implementation", "duration": 10, "status": "Not Started"},
+                    {"name": "Training/Adoption", "duration": 0.5, "status": "Not Started"}
+                ]
+            },
+            {
+                "name": "Testing & QA",
+                "depends_on": "Development Sprint 1",
+                "start_date_override": None,
+                "sub_tasks": [
+                    {"name": "Preparation", "duration": 1, "status": "Not Started"},
+                    {"name": "Implementation", "duration": 5, "status": "Not Started"},
+                    {"name": "Training/Adoption", "duration": 1, "status": "Not Started"}
+                ]
+            }
+        ]
+        
+        self.project_name_var.set("Sample Project")
+        self.project_start_date_var.set(datetime.now().strftime("%d-%m-%Y"))
+        self.current_filepath = None
+        self.saved_legend_position = None
+        self._has_unsaved_changes = True
+        self._last_save_time = None
+        
+        self.populate_treeview()
+        self.calculate_and_draw()
+        self.update_window_title()
+        self._update_status_bar("Loaded sample project with 5 tasks")
 
     def load_template(self):
         filepath = filedialog.askopenfilename(
@@ -1420,11 +1496,10 @@ class GanttChartApp(tk.Tk):
         self.ax.clear()
         self.chart_items = []
         self.current_legend = None  # Clear previous legend reference
+        self._tooltip_annotation = None  # Clear tooltip when redrawing
 
         if not self.tasks:
-            self.ax.text(0.5, 0.5, "No tasks to display.\nUse the File menu to start.", 
-                         horizontalalignment='center', verticalalignment='center', transform=self.ax.transAxes)
-            self.canvas.draw()
+            self._draw_empty_state()
             return
 
         # --- Date Range Calculation ---
@@ -1707,6 +1782,116 @@ class GanttChartApp(tk.Tk):
         self._draw_today_line(date_to_index)
         
         self.figure.tight_layout()
+
+    def _draw_empty_state(self):
+        """Draw a helpful empty state when there are no tasks."""
+        self.ax.clear()
+        self.ax.set_xlim(0, 10)
+        self.ax.set_ylim(0, 10)
+        self.ax.axis('off')
+        
+        # Main welcome message
+        self.ax.text(5, 7, "🗓️  Welcome to Gantt Chart Planner", 
+                    fontsize=16, fontweight='bold', ha='center', va='center',
+                    color='#2c3e50')
+        
+        self.ax.text(5, 5.5, "Get started by adding your first task:", 
+                    fontsize=11, ha='center', va='center', color='#7f8c8d')
+        
+        # Instructions
+        instructions = [
+            "• Type in the 'Quick add' box above and press Enter",
+            "• Or click '+ Add Task' button",
+            "• Or use File → Load Template for a sample project"
+        ]
+        
+        for i, instruction in enumerate(instructions):
+            self.ax.text(5, 4.2 - (i * 0.7), instruction, 
+                        fontsize=10, ha='center', va='center', color='#34495e')
+        
+        # Keyboard shortcuts hint
+        self.ax.text(5, 1.5, "Pro tips: Double-click cells to edit • Tab for quick navigation • Enter to confirm", 
+                    fontsize=9, ha='center', va='center', color='#95a5a6',
+                    style='italic')
+        
+        self.canvas.draw()
+
+    def _show_tooltip(self, event, task_data, hovered_item):
+        """Show a tooltip with task information."""
+        # Build tooltip text
+        task_name = task_data.get('name', 'Unknown')
+        
+        # Get dates
+        start_date = task_data.get('start')
+        end_date = task_data.get('end')
+        start_str = start_date.strftime('%d %b %Y') if start_date else 'N/A'
+        end_str = end_date.strftime('%d %b %Y') if end_date else 'N/A'
+        
+        # Calculate duration
+        total_duration = sum(st.get('duration', 0) for st in task_data.get('sub_tasks', []))
+        duration_str = f"{total_duration:.1f} days" if total_duration else "0 days"
+        
+        # Get status
+        status = self._get_aggregate_status(task_data)
+        
+        # Calculate progress
+        sub_tasks = task_data.get('sub_tasks', [])
+        if sub_tasks:
+            completed = sum(1 for st in sub_tasks if st.get('status') == 'Completed')
+            progress = f"{completed}/{len(sub_tasks)} stages complete"
+        else:
+            progress = "No stages"
+        
+        # If hovering on a sub-task, show that info too
+        if hovered_item['level'] == 1:
+            stage_data = hovered_item['data']
+            stage_name = stage_data.get('name', '')
+            stage_duration = stage_data.get('duration', 0)
+            stage_status = stage_data.get('status', '')
+            tooltip_text = (
+                f"{task_name}\n"
+                f"━━━━━━━━━━━━━━━━\n"
+                f"Stage: {stage_name}\n"
+                f"Duration: {stage_duration} days\n"
+                f"Status: {stage_status}"
+            )
+        else:
+            tooltip_text = (
+                f"{task_name}\n"
+                f"━━━━━━━━━━━━━━━━\n"
+                f"📅 {start_str} → {end_str}\n"
+                f"⏱ Duration: {duration_str}\n"
+                f"📊 Status: {status}\n"
+                f"✓ {progress}"
+            )
+        
+        # Create or update the tooltip annotation
+        if self._tooltip_annotation is None:
+            self._tooltip_annotation = self.ax.annotate(
+                tooltip_text,
+                xy=(event.xdata, event.ydata),
+                xytext=(15, 15),
+                textcoords='offset points',
+                fontsize=9,
+                fontfamily='monospace',
+                bbox=dict(
+                    boxstyle='round,pad=0.5',
+                    facecolor='#2c3e50',
+                    edgecolor='#34495e',
+                    alpha=0.95
+                ),
+                color='white',
+                zorder=100
+            )
+        else:
+            self._tooltip_annotation.set_text(tooltip_text)
+            self._tooltip_annotation.xy = (event.xdata, event.ydata)
+            self._tooltip_annotation.set_visible(True)
+
+    def _hide_tooltip(self):
+        """Hide the tooltip annotation."""
+        if self._tooltip_annotation is not None:
+            self._tooltip_annotation.set_visible(False)
 
     def _draw_today_line(self, date_to_index):
         """Draw a vertical 'Today' line on the chart if today is within range."""
