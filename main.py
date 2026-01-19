@@ -12,7 +12,7 @@ import collections
 
 # Local imports
 from config import default_tasks_data, status_colors, stage_colors as default_stage_colors
-from core_logic import calculate_task_dates, add_work_days
+from core_logic import calculate_task_dates, add_work_days, would_create_cycle
 from dialogs import EditTaskDialog, ManageStagesDialog
 
 
@@ -1141,6 +1141,20 @@ class GanttChartApp(tk.Tk):
         elif column == "#3":  # Depends On (parent task only)
             if not parent_iid:
                 task_name = self.task_tree.item(iid, "text")
+                
+                # Pre-check for dependency cycles
+                if new_value and new_value != "None":
+                    if would_create_cycle(self.tasks_data, task_name, new_value):
+                        messagebox.showerror(
+                            "Dependency Cycle Detected",
+                            f"Cannot set '{new_value}' as a dependency.\n\n"
+                            f"This would create a circular dependency:\n"
+                            f"  {task_name} → {new_value} → ... → {task_name}\n\n"
+                            f"Each task can only depend on tasks that don't "
+                            f"eventually depend back on it."
+                        )
+                        return
+                
                 for task in self.tasks_data:
                     if task['name'] == task_name:
                         task['depends_on'] = new_value if new_value != "None" else None
@@ -1365,7 +1379,19 @@ class GanttChartApp(tk.Tk):
     def calculate_and_draw(self):
         try:
             project_start_date_str = self.project_start_date_var.get()
-            project_start_date = datetime.strptime(project_start_date_str, "%d-%m-%Y")
+            try:
+                project_start_date = datetime.strptime(project_start_date_str, "%d-%m-%Y")
+            except ValueError:
+                # Show helpful message for invalid project start date
+                self.ax.clear()
+                self.ax.text(0.5, 0.5, 
+                    f"Invalid Project Start Date: '{project_start_date_str}'\n\n"
+                    f"Please use DD-MM-YYYY format.\n"
+                    f"Example: {datetime.now().strftime('%d-%m-%Y')}",
+                    horizontalalignment='center', verticalalignment='center', 
+                    transform=self.ax.transAxes, fontsize=11, color='#c0504d')
+                self.canvas.draw()
+                return
             
             if self.tasks_data:
                 self.tasks = calculate_task_dates(self.tasks_data, project_start_date)
@@ -1376,6 +1402,17 @@ class GanttChartApp(tk.Tk):
             self._draw_dependency_arrows()
             self.canvas.draw()
 
+        except ValueError as e:
+            # Scheduling errors (cycles, missing deps, bad dates)
+            error_msg = str(e)
+            self.ax.clear()
+            self.ax.text(0.5, 0.5, 
+                f"Scheduling Error\n\n{error_msg}",
+                horizontalalignment='center', verticalalignment='center', 
+                transform=self.ax.transAxes, fontsize=10, color='#c0504d',
+                wrap=True)
+            self.canvas.draw()
+            self._update_status_bar("⚠ Scheduling error - see chart")
         except Exception as e:
             messagebox.showerror("Error", f"Could not update chart: {e}")
 

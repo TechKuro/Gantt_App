@@ -142,9 +142,10 @@ def calculate_task_dates(
                 t['name'] for t in tasks_list 
                 if t['name'] not in calculated_tasks
             ]
-            raise ValueError(
-                f"Circular dependency or missing task. Uncalculated: {uncalculated}"
-            )
+            
+            # Try to identify the specific issue
+            error_details = _diagnose_dependency_issue(tasks_list, tasks_by_name, uncalculated)
+            raise ValueError(error_details)
     
     return tasks_list
 
@@ -243,3 +244,172 @@ def _calculate_task_and_subtasks(
         # Task with no sub-tasks
         task["start"] = start_date_for_task
         task["end"] = add_work_days(start_date_for_task, 0)
+
+
+def _diagnose_dependency_issue(
+    tasks_list: list[TaskDict],
+    tasks_by_name: dict[str, TaskDict],
+    uncalculated: list[str]
+) -> str:
+    """
+    Diagnose why tasks couldn't be calculated and return a user-friendly error message.
+    """
+    # Check for missing dependencies first
+    for task_name in uncalculated:
+        task = tasks_by_name.get(task_name)
+        if not task:
+            continue
+        dep_name = task.get('depends_on')
+        if dep_name and dep_name not in tasks_by_name:
+            return (
+                f"Task '{task_name}' depends on '{dep_name}', "
+                f"but no task with that name exists.\n\n"
+                f"Please remove or correct this dependency."
+            )
+    
+    # Try to find a cycle
+    cycle = _find_dependency_cycle(tasks_list, tasks_by_name)
+    if cycle:
+        cycle_str = " → ".join(cycle)
+        return (
+            f"Circular dependency detected:\n\n"
+            f"  {cycle_str}\n\n"
+            f"Each task in this chain depends on the next, creating a loop.\n"
+            f"Remove one of these dependencies to fix the issue."
+        )
+    
+    # Generic fallback
+    return (
+        f"Unable to calculate dates for: {', '.join(uncalculated)}\n\n"
+        f"This may be due to missing or invalid dependencies."
+    )
+
+
+def _find_dependency_cycle(
+    tasks_list: list[TaskDict],
+    tasks_by_name: dict[str, TaskDict]
+) -> list[str] | None:
+    """
+    Find a dependency cycle if one exists.
+    
+    Returns:
+        List of task names forming the cycle, or None if no cycle exists.
+    """
+    # Track visited and currently-in-stack nodes for DFS
+    visited = set()
+    in_stack = set()
+    parent = {}  # Track path for cycle reconstruction
+    
+    def dfs(task_name: str) -> list[str] | None:
+        if task_name in in_stack:
+            # Found a cycle - reconstruct it
+            cycle = [task_name]
+            current = parent.get(task_name)
+            while current and current != task_name:
+                cycle.append(current)
+                current = parent.get(current)
+            cycle.append(task_name)
+            cycle.reverse()
+            return cycle
+        
+        if task_name in visited:
+            return None
+        
+        visited.add(task_name)
+        in_stack.add(task_name)
+        
+        task = tasks_by_name.get(task_name)
+        if task:
+            dep_name = task.get('depends_on')
+            if dep_name and dep_name in tasks_by_name:
+                parent[dep_name] = task_name
+                result = dfs(dep_name)
+                if result:
+                    return result
+        
+        in_stack.remove(task_name)
+        return None
+    
+    # Run DFS from each task
+    for task in tasks_list:
+        result = dfs(task['name'])
+        if result:
+            return result
+    
+    return None
+
+
+def would_create_cycle(
+    tasks_list: list[TaskDict],
+    task_name: str,
+    proposed_dependency: str
+) -> bool:
+    """
+    Check if setting task_name to depend on proposed_dependency would create a cycle.
+    
+    Args:
+        tasks_list: The current list of tasks
+        task_name: The task that would gain a new dependency
+        proposed_dependency: The task that would become the dependency
+    
+    Returns:
+        True if setting this dependency would create a cycle, False otherwise.
+    """
+    if not proposed_dependency or proposed_dependency == "None":
+        return False
+    
+    if task_name == proposed_dependency:
+        return True  # Can't depend on yourself
+    
+    # Build a temporary dependency graph with the proposed change
+    tasks_by_name = {t['name']: t for t in tasks_list}
+    
+    # Check if proposed_dependency transitively depends on task_name
+    visited = set()
+    current = proposed_dependency
+    
+    while current:
+        if current == task_name:
+            return True  # Found a cycle
+        if current in visited:
+            break  # Already checked this path
+        visited.add(current)
+        
+        task = tasks_by_name.get(current)
+        if task:
+            current = task.get('depends_on')
+        else:
+            break
+    
+    return False
+
+
+def get_dependency_chain(tasks_list: list[TaskDict], task_name: str) -> list[str]:
+    """
+    Get the chain of tasks that a given task depends on.
+    
+    Returns:
+        List of task names in dependency order (immediate dependency first).
+    """
+    tasks_by_name = {t['name']: t for t in tasks_list}
+    chain = []
+    visited = set()
+    current = task_name
+    
+    while current:
+        task = tasks_by_name.get(current)
+        if not task:
+            break
+        
+        dep_name = task.get('depends_on')
+        if dep_name:
+            if dep_name in visited:
+                chain.append(f"{dep_name} (cycle!)")
+                break
+            chain.append(dep_name)
+            visited.add(dep_name)
+            current = dep_name
+        else:
+            break
+    
+    return chain
