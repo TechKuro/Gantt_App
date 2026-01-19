@@ -38,6 +38,7 @@ class GanttChartApp(tk.Tk):
         self.project_name_var = tk.StringVar(value="New Project")
         self.show_stages_var = tk.BooleanVar(value=True)
         self.show_dependencies_var = tk.BooleanVar(value=True)
+        self.auto_schedule_var = tk.BooleanVar(value=False)  # Cascade changes to dependents
         self.chart_items = []
         self._tree_drag_data = {}
         self.style = ttk.Style()
@@ -425,6 +426,13 @@ class GanttChartApp(tk.Tk):
     def on_release(self, event):
         # End the drag operation and reset cursor
         if self._drag_data is not None:
+            # Check if we need to cascade changes (auto-schedule)
+            dragged_item = self._drag_data.get("item")
+            if dragged_item and self.auto_schedule_var.get():
+                task_data = dragged_item.get('parent_task', dragged_item.get('data'))
+                if task_data:
+                    self._cascade_schedule_changes(task_data['name'])
+            
             self._drag_data = None
             
         # Reset cursor unless we're over the legend
@@ -438,6 +446,52 @@ class GanttChartApp(tk.Tk):
                 pass
                 
         self.canvas.get_tk_widget().config(cursor=cursor_to_set)
+
+    def _cascade_schedule_changes(self, moved_task_name):
+        """
+        When auto-schedule is enabled, cascade date changes to dependent tasks.
+        
+        This clears the start_date_override on all tasks that directly or indirectly
+        depend on the moved task, allowing them to recalculate their dates based
+        on the new predecessor position.
+        """
+        # Find all tasks that depend on the moved task (directly or transitively)
+        dependents = self._find_dependent_tasks(moved_task_name)
+        
+        if dependents:
+            # Clear start_date_override for all dependents so they recalculate
+            for task in self.tasks_data:
+                if task['name'] in dependents:
+                    task['start_date_override'] = None
+            
+            # Show feedback
+            count = len(dependents)
+            self._update_status_bar(
+                f"Auto-scheduled: {count} dependent task{'s' if count != 1 else ''} shifted"
+            )
+
+    def _find_dependent_tasks(self, task_name, visited=None):
+        """
+        Find all tasks that depend on the given task (directly or transitively).
+        
+        Returns:
+            Set of task names that depend on task_name.
+        """
+        if visited is None:
+            visited = set()
+        
+        dependents = set()
+        
+        for task in self.tasks_data:
+            dep_name = task.get('depends_on')
+            if dep_name == task_name and task['name'] not in visited:
+                dependents.add(task['name'])
+                visited.add(task['name'])
+                # Recursively find tasks that depend on this one
+                transitive = self._find_dependent_tasks(task['name'], visited)
+                dependents.update(transitive)
+        
+        return dependents
 
     def reset_legend_position(self):
         """Reset the legend to its default position (lower right)."""
@@ -742,6 +796,10 @@ class GanttChartApp(tk.Tk):
         
         # Restore legend position if saved
         self.saved_legend_position = project_data.get("legend_position")
+        
+        # Restore auto-schedule preference
+        self.auto_schedule_var.set(project_data.get("auto_schedule", False))
+        
         self._has_unsaved_changes = False
         self._last_save_time = None  # File was saved before we opened it
         
@@ -772,7 +830,8 @@ class GanttChartApp(tk.Tk):
             "project_start_date": self.project_start_date_var.get(),
             "tasks": tasks_to_save,
             "stages": list(self.stage_colors.items()),
-            "legend_position": self.saved_legend_position
+            "legend_position": self.saved_legend_position,
+            "auto_schedule": self.auto_schedule_var.get()
         }
         
         with open(filepath, 'w') as f:
@@ -870,6 +929,15 @@ class GanttChartApp(tk.Tk):
         ttk.Label(settings_frame, text="Show Dependencies:").grid(row=3, column=0, sticky="w", pady=5)
         deps_toggle = ttk.Checkbutton(settings_frame, variable=self.show_dependencies_var, command=self.calculate_and_draw)
         deps_toggle.grid(row=3, column=1, sticky="w")
+        
+        # Auto-schedule toggle with explanation tooltip
+        ttk.Label(settings_frame, text="Auto-Schedule:").grid(row=4, column=0, sticky="w", pady=5)
+        auto_sched_frame = ttk.Frame(settings_frame)
+        auto_sched_frame.grid(row=4, column=1, sticky="w")
+        auto_sched_toggle = ttk.Checkbutton(auto_sched_frame, variable=self.auto_schedule_var)
+        auto_sched_toggle.pack(side=tk.LEFT)
+        ttk.Label(auto_sched_frame, text="(shift dependents when moving)", 
+                 font=("Arial", 8), foreground="gray").pack(side=tk.LEFT, padx=5)
 
         editor_frame = ttk.LabelFrame(self.control_frame, text="Tasks", padding="10")
         editor_frame.pack(fill=tk.BOTH, expand=True, pady=5)
