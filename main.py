@@ -704,6 +704,14 @@ class GanttChartApp(tk.Tk):
         self.task_tree.bind("<ButtonPress-1>", self.on_tree_press)
         self.task_tree.bind("<B1-Motion>", self.on_tree_motion)
         self.task_tree.bind("<ButtonRelease-1>", self.on_tree_release)
+        
+        # Keyboard navigation bindings
+        self.task_tree.bind("<Return>", self.on_tree_enter_key)
+        self.task_tree.bind("<Delete>", self.on_tree_delete_key)
+        self.task_tree.bind("<BackSpace>", self.on_tree_delete_key)
+        
+        # Allow tree to receive keyboard focus
+        self.task_tree.focus_set()
 
         action_frame = ttk.Frame(self.control_frame)
         action_frame.pack(fill=tk.X, pady=10)
@@ -843,6 +851,26 @@ class GanttChartApp(tk.Tk):
                 self.task_tree.focus(iid)
         
         self._tree_drag_data = {}
+
+    def on_tree_enter_key(self, event):
+        """Handle Enter key to edit the selected task."""
+        selected = self.task_tree.selection()
+        if selected:
+            self.edit_task(item_id=selected[0])
+        return "break"  # Prevent default handling
+
+    def on_tree_delete_key(self, event):
+        """Handle Delete/Backspace key to remove the selected task."""
+        selected = self.task_tree.selection()
+        if selected:
+            # Confirm deletion
+            task_name = self.task_tree.item(selected[0], "text")
+            if messagebox.askyesno(
+                "Remove Task", 
+                f"Are you sure you want to remove '{task_name}'?"
+            ):
+                self.remove_task()
+        return "break"  # Prevent default handling
 
     def edit_task(self, item_id=None):
         selected_id = None
