@@ -626,7 +626,8 @@ class GanttChartApp(tk.Tk):
         messagebox.showinfo("Template Saved", f"Template successfully saved to\n{filepath}")
 
     def export_chart(self):
-        if not self.tasks:
+        # Check tasks_data (the source of truth) not self.tasks (calculated result)
+        if not self.tasks_data:
             messagebox.showinfo("Export Chart", "There is nothing to export.")
             return
 
