@@ -473,10 +473,58 @@ class GanttChartApp(tk.Tk):
         file_menu.add_command(label="Exit", command=self.quit)
 
     def setup_chart_canvas(self):
+        # --- Chart Controls Bar ---
+        controls_bar = ttk.Frame(self.chart_frame)
+        controls_bar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=3)
+        
+        # Zoom controls
+        ttk.Label(controls_bar, text="Zoom:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        self.zoom_mode_var = tk.StringVar(value="auto")
+        
+        zoom_auto_btn = ttk.Radiobutton(controls_bar, text="Auto", variable=self.zoom_mode_var, 
+                                         value="auto", command=self._on_zoom_change)
+        zoom_auto_btn.pack(side=tk.LEFT, padx=2)
+        
+        zoom_day_btn = ttk.Radiobutton(controls_bar, text="Day", variable=self.zoom_mode_var, 
+                                        value="daily", command=self._on_zoom_change)
+        zoom_day_btn.pack(side=tk.LEFT, padx=2)
+        
+        zoom_week_btn = ttk.Radiobutton(controls_bar, text="Week", variable=self.zoom_mode_var, 
+                                         value="weekly", command=self._on_zoom_change)
+        zoom_week_btn.pack(side=tk.LEFT, padx=2)
+        
+        zoom_month_btn = ttk.Radiobutton(controls_bar, text="Month", variable=self.zoom_mode_var, 
+                                          value="monthly", command=self._on_zoom_change)
+        zoom_month_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Separator
+        ttk.Separator(controls_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        
+        # Show Today checkbox
+        self.show_today_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(controls_bar, text="Show Today", variable=self.show_today_var, 
+                        command=self.calculate_and_draw).pack(side=tk.LEFT, padx=5)
+        
+        # Go to Today button
+        ttk.Button(controls_bar, text="Go to Today", command=self._scroll_to_today, 
+                   width=12).pack(side=tk.LEFT, padx=5)
+        
+        # --- Chart Canvas ---
         self.figure = Figure(figsize=(18, 4), dpi=100)
         self.ax = self.figure.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.figure, self.chart_frame)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+    def _on_zoom_change(self):
+        """Handle zoom level change."""
+        self.calculate_and_draw()
+
+    def _scroll_to_today(self):
+        """Scroll the chart to center on today's date."""
+        # This is a visual hint - for matplotlib embedded charts, 
+        # actual scrolling would need more complex implementation
+        self.calculate_and_draw()
 
     def on_dependency_change(self, event, task):
         """Called specifically when a dependency dropdown is changed."""
@@ -1379,15 +1427,22 @@ class GanttChartApp(tk.Tk):
             min_date = min(all_dates)
             max_date = max(all_dates)
 
-        project_duration_days = (max_date - min_date).days
-        if project_duration_days > 365 * 2: # ~2 years
-            self.view_mode = 'yearly'
-        elif project_duration_days > 90: # ~3 months
-            self.view_mode = 'monthly'
-        elif project_duration_days > 21:
-            self.view_mode = 'weekly'
+        # Determine view mode: user override or auto-calculate
+        user_zoom = self.zoom_mode_var.get() if hasattr(self, 'zoom_mode_var') else "auto"
+        
+        if user_zoom != "auto":
+            self.view_mode = user_zoom
         else:
-            self.view_mode = 'daily'
+            # Auto-calculate based on project duration
+            project_duration_days = (max_date - min_date).days
+            if project_duration_days > 365 * 2:  # ~2 years
+                self.view_mode = 'yearly'
+            elif project_duration_days > 90:  # ~3 months
+                self.view_mode = 'monthly'
+            elif project_duration_days > 21:
+                self.view_mode = 'weekly'
+            else:
+                self.view_mode = 'daily'
 
         # --- Work Day Calculation ---
         self.work_days = []
@@ -1610,7 +1665,34 @@ class GanttChartApp(tk.Tk):
         self.ax.set_title(self.project_name_var.get())
         self.ax.set_xlabel('Date')
         self.ax.set_ylabel('Tasks')
+        
+        # --- Draw "Today" Line ---
+        self._draw_today_line(date_to_index)
+        
         self.figure.tight_layout()
+
+    def _draw_today_line(self, date_to_index):
+        """Draw a vertical 'Today' line on the chart if today is within range."""
+        if not hasattr(self, 'show_today_var') or not self.show_today_var.get():
+            return
+        
+        today = datetime.now().date()
+        today_idx = date_to_index.get(today)
+        
+        if today_idx is not None:
+            # Draw vertical line
+            self.ax.axvline(x=today_idx, color='#e74c3c', linestyle='-', linewidth=2, zorder=10)
+            
+            # Add "Today" label at the top
+            y_min, y_max = self.ax.get_ylim()
+            # Since y-axis is inverted, y_min is actually at top
+            label_y = y_min + 0.3  # Position near top of chart
+            
+            self.ax.annotate('Today', xy=(today_idx, label_y),
+                           fontsize=9, fontweight='bold', color='#e74c3c',
+                           ha='center', va='bottom',
+                           bbox=dict(boxstyle='round,pad=0.2', facecolor='white', 
+                                   edgecolor='#e74c3c', alpha=0.9))
 
     def _get_aggregate_status(self, task):
         sub_statuses = [s['status'] for s in task.get('sub_tasks', [])]
