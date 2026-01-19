@@ -49,6 +49,7 @@ class GanttChartApp(tk.Tk):
         self._has_unsaved_changes = False
         self._last_save_time = None
         self._debounce_job = None  # For debouncing UI updates
+        self._current_inline_editor = None  # For inline cell editing
 
         # --- Menu Bar ---
         self.create_menu()
@@ -749,23 +750,41 @@ class GanttChartApp(tk.Tk):
         editor_frame = ttk.LabelFrame(self.control_frame, text="Tasks", padding="10")
         editor_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
+        # Quick-add entry at top
+        quick_add_frame = ttk.Frame(editor_frame)
+        quick_add_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Label(quick_add_frame, text="Quick add:").pack(side=tk.LEFT)
+        self.quick_add_var = tk.StringVar()
+        self.quick_add_entry = ttk.Entry(quick_add_frame, textvariable=self.quick_add_var, width=40)
+        self.quick_add_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.quick_add_entry.bind("<Return>", self._on_quick_add)
+        self.quick_add_entry.bind("<Tab>", self._on_quick_add)
+        
+        # Placeholder text behavior
+        self._quick_add_placeholder = "Type task name and press Enter..."
+        self.quick_add_entry.insert(0, self._quick_add_placeholder)
+        self.quick_add_entry.config(foreground='gray')
+        self.quick_add_entry.bind("<FocusIn>", self._on_quick_add_focus_in)
+        self.quick_add_entry.bind("<FocusOut>", self._on_quick_add_focus_out)
+        
         columns = ("duration", "status", "depends_on", "start_date_override")
         self.task_tree = ttk.Treeview(editor_frame, columns=columns, show="tree headings")
         
         self.task_tree.heading("#0", text="Task Name")
-        self.task_tree.column("#0", width=250, anchor='w')
+        self.task_tree.column("#0", width=200, anchor='w')
         
-        self.task_tree.heading("duration", text="Duration")
-        self.task_tree.column("duration", width=60, anchor='center')
+        self.task_tree.heading("duration", text="Days")
+        self.task_tree.column("duration", width=50, anchor='center')
         
         self.task_tree.heading("status", text="Status")
-        self.task_tree.column("status", width=100, anchor='center')
+        self.task_tree.column("status", width=90, anchor='center')
         
         self.task_tree.heading("depends_on", text="Depends On")
-        self.task_tree.column("depends_on", width=150, anchor='w')
+        self.task_tree.column("depends_on", width=120, anchor='w')
 
-        self.task_tree.heading("start_date_override", text="Start Date")
-        self.task_tree.column("start_date_override", width=100, anchor='center')
+        self.task_tree.heading("start_date_override", text="Start")
+        self.task_tree.column("start_date_override", width=80, anchor='center')
         
         self.task_tree.pack(fill=tk.BOTH, expand=True)
         self.task_tree.bind("<Double-1>", self.on_tree_double_click)
@@ -777,25 +796,46 @@ class GanttChartApp(tk.Tk):
         self.task_tree.bind("<Return>", self.on_tree_enter_key)
         self.task_tree.bind("<Delete>", self.on_tree_delete_key)
         self.task_tree.bind("<BackSpace>", self.on_tree_delete_key)
+        self.task_tree.bind("<Tab>", self._on_tree_tab)
         
         # Allow tree to receive keyboard focus
         self.task_tree.focus_set()
+        
+        # Store reference for inline editing
+        self._current_inline_editor = None
 
         action_frame = ttk.Frame(self.control_frame)
         action_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Button(action_frame, text="Add New Task", command=self.add_task).pack(side=tk.LEFT, padx=5)
-        ttk.Button(action_frame, text="Edit Selected Task", command=self.edit_task).pack(side=tk.LEFT, padx=5)
-        ttk.Button(action_frame, text="Remove Selected Task", command=self.remove_task).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="+ Add Task", command=self.add_task).pack(side=tk.LEFT, padx=2)
+        ttk.Button(action_frame, text="Edit", command=self.edit_task).pack(side=tk.LEFT, padx=2)
+        ttk.Button(action_frame, text="Remove", command=self.remove_task).pack(side=tk.LEFT, padx=2)
+        
+        # Hint label
+        hint_label = ttk.Label(self.control_frame, text="Tip: Double-click any cell to edit inline", 
+                              font=("Arial", 8), foreground="gray")
+        hint_label.pack(pady=(0, 5))
 
     def populate_treeview(self):
         for i in self.task_tree.get_children():
             self.task_tree.delete(i)
         
         for i, task_data in enumerate(self.tasks_data):
+            # Calculate total duration for parent task
+            total_duration = sum(st.get('duration', 0) for st in task_data.get('sub_tasks', []))
+            total_duration_str = f"{total_duration:.1f}" if total_duration else ""
+            
+            # Get aggregate status for parent task
+            agg_status = self._get_aggregate_status(task_data)
+            
             task_id = self.task_tree.insert(
                 "", "end", iid=f"task_{i}", text=task_data['name'], open=True,
-                values=("", "", task_data.get('depends_on') or "", task_data.get('start_date_override') or "")
+                values=(
+                    total_duration_str, 
+                    agg_status, 
+                    task_data.get('depends_on') or "", 
+                    task_data.get('start_date_override') or ""
+                )
             )
             
             for j, sub_task in enumerate(task_data.get('sub_tasks', [])):
@@ -804,50 +844,291 @@ class GanttChartApp(tk.Tk):
                     values=(sub_task['duration'], sub_task['status'], "", "")
                 )
 
+    def _on_quick_add_focus_in(self, event):
+        """Clear placeholder when entry gains focus."""
+        if self.quick_add_var.get() == self._quick_add_placeholder:
+            self.quick_add_entry.delete(0, tk.END)
+            self.quick_add_entry.config(foreground='black')
+
+    def _on_quick_add_focus_out(self, event):
+        """Restore placeholder if entry is empty."""
+        if not self.quick_add_var.get().strip():
+            self.quick_add_entry.delete(0, tk.END)
+            self.quick_add_entry.insert(0, self._quick_add_placeholder)
+            self.quick_add_entry.config(foreground='gray')
+
+    def _on_quick_add(self, event):
+        """Handle quick task addition from the entry field."""
+        task_name = self.quick_add_var.get().strip()
+        if not task_name or task_name == self._quick_add_placeholder:
+            return "break"
+        
+        # Create new task with defaults
+        new_task = {
+            "name": task_name,
+            "depends_on": None,
+            "start_date_override": None,
+            "sub_tasks": []
+        }
+        
+        # Add default stages based on stage_colors
+        for stage_name in self.stage_colors.keys():
+            new_task['sub_tasks'].append({
+                "name": stage_name,
+                "duration": 1,
+                "status": "Not Started"
+            })
+        
+        self.tasks_data.append(new_task)
+        self.quick_add_var.set("")
+        self.quick_add_entry.config(foreground='black')
+        
+        self._mark_unsaved()
+        self.populate_treeview()
+        self.calculate_and_draw()
+        
+        # Select the newly added task
+        new_task_id = f"task_{len(self.tasks_data) - 1}"
+        self.task_tree.selection_set(new_task_id)
+        self.task_tree.focus(new_task_id)
+        self.task_tree.see(new_task_id)
+        
+        self._update_status_bar(f"Added task: {task_name}")
+        
+        # Keep focus on quick-add for rapid entry
+        self.quick_add_entry.focus_set()
+        return "break"
+
+    def _on_tree_tab(self, event):
+        """Handle Tab key to move focus to quick-add entry."""
+        self.quick_add_entry.focus_set()
+        return "break"
+
     def on_tree_double_click(self, event):
+        """Handle double-click to edit cells inline."""
         self._tree_drag_data = {} 
         
+        iid = self.task_tree.identify_row(event.y)
+        if not iid:
+            return
+            
         column = self.task_tree.identify_column(event.x)
-        if column == "#0": 
-            iid = self.task_tree.identify_row(event.y)
-            if iid and not self.task_tree.parent(iid): 
-                self._edit_task_name_inline(iid)
-        else:
-            iid = self.task_tree.identify_row(event.y)
-            if iid:
-                self.edit_task(item_id=iid)
+        parent_iid = self.task_tree.parent(iid)
+        
+        if column == "#0":
+            # Task name - only allow editing parent tasks
+            if not parent_iid: 
+                self._edit_cell_inline(iid, column)
+        elif column == "#1":  # Duration
+            # Duration - only for sub-tasks (stages)
+            if parent_iid:
+                self._edit_cell_inline(iid, column)
+        elif column == "#2":  # Status
+            # Status - only for sub-tasks
+            if parent_iid:
+                self._edit_cell_inline(iid, column, editor_type="combo")
+        elif column == "#3":  # Depends On
+            # Depends On - only for parent tasks
+            if not parent_iid:
+                self._edit_cell_inline(iid, column, editor_type="combo")
+        elif column == "#4":  # Start Date
+            # Start Date - only for parent tasks
+            if not parent_iid:
+                self._edit_cell_inline(iid, column)
 
-    def _edit_task_name_inline(self, iid):
-        bbox = self.task_tree.bbox(iid, "#0")
-        if not bbox: return
+    def _edit_cell_inline(self, iid, column, editor_type="entry"):
+        """
+        Universal inline cell editor for the task tree.
+        
+        Args:
+            iid: The treeview item ID
+            column: The column identifier (e.g., "#0", "#1", etc.)
+            editor_type: "entry" for text input, "combo" for dropdown
+        """
+        # Destroy any existing editor
+        if self._current_inline_editor:
+            try:
+                self._current_inline_editor.destroy()
+            except:
+                pass
+            self._current_inline_editor = None
+        
+        bbox = self.task_tree.bbox(iid, column)
+        if not bbox:
+            return
         
         x, y, width, height = bbox
+        parent_iid = self.task_tree.parent(iid)
         
-        original_name = self.task_tree.item(iid, "text")
-        entry_var = tk.StringVar(value=original_name)
-        entry = ttk.Entry(self.task_tree, textvariable=entry_var)
-        entry.place(x=x, y=y, width=width, height=height)
-        entry.focus_set()
+        # Get current value based on column
+        if column == "#0":
+            current_value = self.task_tree.item(iid, "text").strip()
+            if current_value.startswith("- "):
+                current_value = current_value[2:]  # Remove stage prefix
+        else:
+            col_index = int(column[1:]) - 1  # Convert "#1" to 0
+            values = self.task_tree.item(iid, "values")
+            current_value = values[col_index] if col_index < len(values) else ""
+        
+        # Create appropriate editor widget
+        if editor_type == "combo":
+            if column == "#2":  # Status
+                options = list(self.status_colors.keys())
+            elif column == "#3":  # Depends On
+                task_names = [t['name'] for t in self.tasks_data]
+                current_task_name = self.task_tree.item(iid, "text")
+                options = ["None"] + [n for n in task_names if n != current_task_name]
+            else:
+                options = []
+            
+            editor_var = tk.StringVar(value=current_value or (options[0] if options else ""))
+            editor = ttk.Combobox(self.task_tree, textvariable=editor_var, 
+                                  values=options, state="readonly", width=max(10, width//8))
+            # Auto-open dropdown
+            self.after(50, lambda: editor.event_generate('<Button-1>'))
+        else:
+            editor_var = tk.StringVar(value=current_value)
+            editor = ttk.Entry(self.task_tree, textvariable=editor_var, width=max(10, width//8))
+            editor.select_range(0, tk.END)
+        
+        editor.place(x=x, y=y, width=width, height=height)
+        editor.focus_set()
+        self._current_inline_editor = editor
         
         def on_commit(event=None):
-            new_name = entry_var.get()
-            entry.destroy()
+            new_value = editor_var.get().strip()
+            editor.destroy()
+            self._current_inline_editor = None
             
-            if new_name and new_name != original_name:
+            if new_value == current_value:
+                return  # No change
+            
+            # Apply the change based on column type
+            self._apply_cell_edit(iid, column, new_value, current_value, parent_iid)
+        
+        def on_cancel(event=None):
+            editor.destroy()
+            self._current_inline_editor = None
+        
+        def on_tab(event=None):
+            on_commit()
+            # Move to next editable cell (future enhancement)
+            return "break"
+        
+        editor.bind("<Return>", on_commit)
+        editor.bind("<FocusOut>", on_commit)
+        editor.bind("<Escape>", on_cancel)
+        editor.bind("<Tab>", on_tab)
+    
+    def _apply_cell_edit(self, iid, column, new_value, old_value, parent_iid):
+        """Apply an inline cell edit to the data model."""
+        
+        if column == "#0":  # Task Name
+            if not parent_iid:
+                # Editing parent task name
                 for task in self.tasks_data:
-                    if task['name'] == original_name:
-                        task['name'] = new_name
+                    if task['name'] == old_value:
+                        task['name'] = new_value
                         break
                 
+                # Update dependencies referencing this task
                 for task in self.tasks_data:
-                    if task.get('depends_on') == original_name:
-                        task['depends_on'] = new_name
+                    if task.get('depends_on') == old_value:
+                        task['depends_on'] = new_value
                 
+                self._mark_unsaved()
                 self.populate_treeview()
                 self.calculate_and_draw()
-
-        entry.bind("<Return>", on_commit)
-        entry.bind("<FocusOut>", on_commit)
+        
+        elif column == "#1":  # Duration (sub-task only)
+            if parent_iid:
+                # Find the sub-task and update duration
+                try:
+                    new_duration = float(new_value) if new_value else 1.0
+                    if new_duration < 0.25:
+                        new_duration = 0.25
+                except ValueError:
+                    new_duration = 1.0
+                
+                parent_task_name = self.task_tree.item(parent_iid, "text")
+                sub_task_text = self.task_tree.item(iid, "text").strip()
+                if sub_task_text.startswith("- "):
+                    sub_task_name = sub_task_text[2:]
+                else:
+                    sub_task_name = sub_task_text
+                
+                for task in self.tasks_data:
+                    if task['name'] == parent_task_name:
+                        for sub_task in task.get('sub_tasks', []):
+                            if sub_task['name'] == sub_task_name:
+                                sub_task['duration'] = new_duration
+                                break
+                        break
+                
+                self._mark_unsaved()
+                self.populate_treeview()
+                self.calculate_and_draw()
+        
+        elif column == "#2":  # Status (sub-task only)
+            if parent_iid:
+                parent_task_name = self.task_tree.item(parent_iid, "text")
+                sub_task_text = self.task_tree.item(iid, "text").strip()
+                if sub_task_text.startswith("- "):
+                    sub_task_name = sub_task_text[2:]
+                else:
+                    sub_task_name = sub_task_text
+                
+                for task in self.tasks_data:
+                    if task['name'] == parent_task_name:
+                        for sub_task in task.get('sub_tasks', []):
+                            if sub_task['name'] == sub_task_name:
+                                sub_task['status'] = new_value
+                                break
+                        break
+                
+                self._mark_unsaved()
+                self.populate_treeview()
+                self.calculate_and_draw()
+        
+        elif column == "#3":  # Depends On (parent task only)
+            if not parent_iid:
+                task_name = self.task_tree.item(iid, "text")
+                for task in self.tasks_data:
+                    if task['name'] == task_name:
+                        task['depends_on'] = new_value if new_value != "None" else None
+                        # Clear start date override when setting dependency
+                        if new_value and new_value != "None":
+                            task['start_date_override'] = None
+                        break
+                
+                self._mark_unsaved()
+                self.populate_treeview()
+                self.calculate_and_draw()
+        
+        elif column == "#4":  # Start Date Override (parent task only)
+            if not parent_iid:
+                task_name = self.task_tree.item(iid, "text")
+                for task in self.tasks_data:
+                    if task['name'] == task_name:
+                        # Validate date format
+                        if new_value:
+                            try:
+                                datetime.strptime(new_value, "%d-%m-%Y")
+                                task['start_date_override'] = new_value
+                                task['depends_on'] = None  # Clear dependency when setting start date
+                            except ValueError:
+                                messagebox.showwarning(
+                                    "Invalid Date", 
+                                    f"Please use DD-MM-YYYY format.\nExample: {datetime.now().strftime('%d-%m-%Y')}"
+                                )
+                                return
+                        else:
+                            task['start_date_override'] = None
+                        break
+                
+                self._mark_unsaved()
+                self.populate_treeview()
+                self.calculate_and_draw()
 
     def on_tree_press(self, event):
         iid = self.task_tree.identify_row(event.y)
