@@ -962,21 +962,27 @@ class GanttChartApp(tk.Tk):
         sort_combo.pack(side=tk.LEFT, padx=2)
         sort_combo.bind("<<ComboboxSelected>>", self._on_filter_sort_change)
         
-        # Quick-add entry at top
-        quick_add_frame = ttk.Frame(editor_frame)
-        quick_add_frame.pack(fill=tk.X, pady=(0, 5))
+        # Quick-add entry - prominent styling
+        quick_add_frame = ttk.LabelFrame(editor_frame, text="➕ Quick Add Task", padding=5)
+        quick_add_frame.pack(fill=tk.X, pady=(0, 8))
         
-        ttk.Label(quick_add_frame, text="Quick add:").pack(side=tk.LEFT)
         self.quick_add_var = tk.StringVar()
-        self.quick_add_entry = ttk.Entry(quick_add_frame, textvariable=self.quick_add_var, width=40)
-        self.quick_add_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        # Use tk.Entry instead of ttk.Entry for better visual styling control
+        self.quick_add_entry = tk.Entry(
+            quick_add_frame, 
+            textvariable=self.quick_add_var, 
+            font=('Arial', 10),
+            relief=tk.SUNKEN,
+            bd=2
+        )
+        self.quick_add_entry.pack(fill=tk.X, expand=True, ipady=4)
         self.quick_add_entry.bind("<Return>", self._on_quick_add)
         self.quick_add_entry.bind("<Tab>", self._on_quick_add)
         
         # Placeholder text behavior
-        self._quick_add_placeholder = "Type task name and press Enter..."
+        self._quick_add_placeholder = "Type task name here and press Enter..."
         self.quick_add_entry.insert(0, self._quick_add_placeholder)
-        self.quick_add_entry.config(foreground='gray')
+        self.quick_add_entry.config(fg='#888888')
         self.quick_add_entry.bind("<FocusIn>", self._on_quick_add_focus_in)
         self.quick_add_entry.bind("<FocusOut>", self._on_quick_add_focus_out)
         
@@ -1119,14 +1125,14 @@ class GanttChartApp(tk.Tk):
         """Clear placeholder when entry gains focus."""
         if self.quick_add_var.get() == self._quick_add_placeholder:
             self.quick_add_entry.delete(0, tk.END)
-            self.quick_add_entry.config(foreground='black')
+            self.quick_add_entry.config(fg='black')
 
     def _on_quick_add_focus_out(self, event):
         """Restore placeholder if entry is empty."""
         if not self.quick_add_var.get().strip():
             self.quick_add_entry.delete(0, tk.END)
             self.quick_add_entry.insert(0, self._quick_add_placeholder)
-            self.quick_add_entry.config(foreground='gray')
+            self.quick_add_entry.config(fg='#888888')
 
     def _on_quick_add(self, event):
         """Handle quick task addition from the entry field."""
@@ -1152,7 +1158,7 @@ class GanttChartApp(tk.Tk):
         
         self.tasks_data.append(new_task)
         self.quick_add_var.set("")
-        self.quick_add_entry.config(foreground='black')
+        self.quick_add_entry.config(fg='black')
         
         self._mark_unsaved()
         self.populate_treeview()
