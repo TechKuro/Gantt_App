@@ -47,7 +47,8 @@ class GanttChartApp(tk.Tk):
         self.view_mode = 'daily'
         self.task_rows = {}
         self._has_unsaved_changes = False
-        self._last_save_time = None 
+        self._last_save_time = None
+        self._debounce_job = None  # For debouncing UI updates
 
         # --- Menu Bar ---
         self.create_menu()
@@ -241,7 +242,7 @@ class GanttChartApp(tk.Tk):
                         if new_sub_duration < 0.25: new_sub_duration = 0.25
                         last_sub_task['duration'] = new_sub_duration
 
-                self.on_ui_change()
+                self.on_ui_change(debounce=True)
 
             elif mode == "move":
                 if event.xdata is None: return 
@@ -299,7 +300,7 @@ class GanttChartApp(tk.Tk):
                             if new_current_duration >= 0.25:
                                 task_data['duration'] = new_current_duration
                         
-                        self.on_ui_change()
+                        self.on_ui_change(debounce=True)
 
                     else:
                         # --- Original "Push" Logic ---
@@ -325,7 +326,7 @@ class GanttChartApp(tk.Tk):
                             parent_task['start_date_override'] = new_start_date.strftime("%d-%m-%Y")
                             parent_task['depends_on'] = None
 
-                        self.on_ui_change()
+                        self.on_ui_change(debounce=True)
 
                 else:
                     # --- Logic for moving a parent task ---
@@ -339,7 +340,7 @@ class GanttChartApp(tk.Tk):
                     parent_task = item.get('parent_task', task_data)
                     parent_task['start_date_override'] = new_start_date.strftime("%d-%m-%Y")
                     parent_task['depends_on'] = None
-                    self.on_ui_change()
+                    self.on_ui_change(debounce=True)
             return
 
         # --- Hover Logic ---
@@ -485,13 +486,33 @@ class GanttChartApp(tk.Tk):
         # Now, trigger the standard update process.
         self.on_ui_change(event)
 
-    def on_ui_change(self, event=None):
-        if self._is_updating: return
+    def on_ui_change(self, event=None, debounce=False):
+        """
+        Update the UI in response to data changes.
+        
+        Args:
+            event: Optional tkinter event
+            debounce: If True, delay the update to prevent rapid-fire redraws during dragging
+        """
+        if debounce:
+            # Cancel any pending debounced update
+            if self._debounce_job is not None:
+                self.after_cancel(self._debounce_job)
+            # Schedule the update after a short delay
+            self._debounce_job = self.after(50, lambda: self._do_ui_update())
+        else:
+            self._do_ui_update()
+
+    def _do_ui_update(self):
+        """Internal method to perform the actual UI update."""
+        self._debounce_job = None
+        if self._is_updating:
+            return
         self._is_updating = True
         try:
             self._mark_unsaved()
             self.update_window_title()
-            self.populate_treeview() # Re-populating is now the main update path
+            self.populate_treeview()  # Re-populating is now the main update path
             self.calculate_and_draw()
         finally:
             self._is_updating = False
